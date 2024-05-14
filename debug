@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+if(@ARGV) {
+	my $meta_command = $ARGV[0];
+
+	my %obj = (
+		"gen-ramdisk" => \&__gen_ramdisk,
+		"debug-gdb" => \&__init_debug,
+		"exec" => \&__exec_qemu,
+		"help" => \&__help,
+	);
+
+	$obj{$meta_command}->(@ARGV) || __command_not_found($ARGV[0]);
+}
+
+sub __gen_ramdisk {
+	my @params = @_;
+
+	my $module = $params[1];
+	my $module_param = "";
+	if($module) {
+		my @module_div = split("/", $module);
+		my $name_module_ko = $module_div[scalar @module_div - 1];
+		my @name_module_ko_split = split(".ko", $name_module_ko);
+		my $name_module = $name_module_ko_split[0];
+
+		$module_param = '--include "' . $module . '" "/' . $name_module . '"';
+	}
+
+	system("sudo dracut -v -f $module_param ramdisk.img \$(uname -r)");
+	system('echo "add-auto-load-safe-path ~/repositories/linux/scripts/gdb/vmlinux-gdb.py" >> ~/.gdbinit');
+
+	return 1;
+}
+
+sub __init_debug {
+	system('sudo qemu-system-x86_64 -kernel vmlinux -initrd ramdisk.img -append "console=tty0 nokaslr" -enable-kvm -cpu host -m 512 -s -S');
+	return 1;
+}
+
+sub __exec_qemu {
+	system('sudo qemu-system-x86_64 -kernel arch/x86_64/boot/bzImage -initrd ramdisk.img -enable-kvm -cpu host -m 512');
+	return 1;
+}
+
+sub __command_not_found {
+	my ($param) = @_;
+	print "command <$param> not found";
+	__help();
+}
+
+sub __help {
+	print qq~ 
+
+ --- DEBUG POR: SIMOES, GUILHERME ---- 
+
++-------------------------------------------------------------+
+| *********** PARA FINS DE DEBUG COM QEMU ******************  |
+|execute: ./debug.sh debug-gdb                                |
+|depois em outro terminal exeute: gdb vmlinux                 |
+|depois dentro do prompt do gdb digite: target remove :1234   |
++-------------------------------------------------------------+
+
+
++---------------------------------------+
+| ************ EXECUTANDO ************* |
+| execute o comando: ./debug exec       |
++---------------------------------------+                      	
+~;
+}

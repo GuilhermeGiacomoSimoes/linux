@@ -37,12 +37,12 @@ sub __gen_ramdisk {
 }
 
 sub __init_debug {
-	system('sudo qemu-system-x86_64 -kernel vmlinux -initrd ramdisk.img -append "console=tty0 nokaslr" -enable-kvm -cpu host -m 512 -s -S');
+	system('sudo qemu-system-x86_64 -kernel vmlinux -initrd ramdisk.img -enable-kvm -cpu host -m 4G -s -S');
 	return 1;
 }
 
 sub __exec_qemu {
-	system('sudo qemu-system-x86_64 -kernel arch/x86_64/boot/bzImage -initrd ramdisk.img -enable-kvm -cpu host -m 512');
+	system('sudo qemu-system-x86_64 -kernel arch/x86_64/boot/bzImage -append "console=tty0 nokaslr" -initrd ramdisk.img -enable-kvm -cpu host -m 4G');
 	return 1;
 }
 

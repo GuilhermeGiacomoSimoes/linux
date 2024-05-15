@@ -56,9 +56,7 @@ MODULE_PARM_DESC(power_scheme,
  */
 static int __init iwl_mvm_init(void)
 {
-	int ret;
-
-	ret = iwl_mvm_rate_control_register();
+	int ret = iwl_mvm_rate_control_register();
 	if (ret) {
 		pr_err("Unable to register rate control algorithm: %d\n", ret);
 		return ret;

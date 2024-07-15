@@ -34,11 +34,8 @@
 static void cifs_set_netfs_context(struct inode *inode)
 {
 	struct cifsInodeInfo *cifs_i = CIFS_I(inode);
-	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
 
 	netfs_inode_init(&cifs_i->netfs, &cifs_req_ops, true);
-	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_STRICT_IO)
-		__set_bit(NETFS_ICTX_WRITETHROUGH, &cifs_i->netfs.flags);
 }
 
 static void cifs_set_ops(struct inode *inode)
@@ -609,6 +606,10 @@ cifs_sfu_type(struct cifs_fattr *fattr, const char *path,
 				mnr = le64_to_cpu(*(__le64 *)(pbuf+16));
 				fattr->cf_rdev = MKDEV(mjr, mnr);
 			}
+		} else if (memcmp("LnxSOCK", pbuf, 8) == 0) {
+			cifs_dbg(FYI, "Socket\n");
+			fattr->cf_mode |= S_IFSOCK;
+			fattr->cf_dtype = DT_SOCK;
 		} else if (memcmp("IntxLNK", pbuf, 7) == 0) {
 			cifs_dbg(FYI, "Symlink\n");
 			fattr->cf_mode |= S_IFLNK;
@@ -2468,7 +2469,8 @@ int
 cifs_revalidate_mapping(struct inode *inode)
 {
 	int rc;
-	unsigned long *flags = &CIFS_I(inode)->flags;
+	struct cifsInodeInfo *cifs_inode = CIFS_I(inode);
+	unsigned long *flags = &cifs_inode->flags;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
 
 	/* swapfiles are not supposed to be shared */
@@ -2485,6 +2487,7 @@ cifs_revalidate_mapping(struct inode *inode)
 		if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_RW_CACHE)
 			goto skip_invalidate;
 
+		cifs_inode->netfs.zero_point = cifs_inode->netfs.remote_i_size;
 		rc = filemap_invalidate_inode(inode, true, 0, LLONG_MAX);
 		if (rc) {
 			cifs_dbg(VFS, "%s: invalidate inode %p failed with rc %d\n",

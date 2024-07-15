@@ -186,6 +186,7 @@ struct gendisk {
 	 */
 	unsigned int		nr_zones;
 	unsigned int		zone_capacity;
+	unsigned int		last_zone_capacity;
 	unsigned long		*conv_zones_bitmap;
 	unsigned int            zone_wplugs_hash_bits;
 	spinlock_t              zone_wplugs_lock;
@@ -211,11 +212,6 @@ struct gendisk {
 	 */
 	struct blk_independent_access_ranges *ia_ranges;
 };
-
-static inline bool disk_live(struct gendisk *disk)
-{
-	return !inode_unhashed(disk->part0->bd_inode);
-}
 
 /**
  * disk_openers - returns how many openers are there for a disk
@@ -723,15 +719,35 @@ void invalidate_disk(struct gendisk *disk);
 void set_disk_ro(struct gendisk *disk, bool read_only);
 void disk_uevent(struct gendisk *disk, enum kobject_action action);
 
+static inline u8 bdev_partno(const struct block_device *bdev)
+{
+	return atomic_read(&bdev->__bd_flags) & BD_PARTNO;
+}
+
+static inline bool bdev_test_flag(const struct block_device *bdev, unsigned flag)
+{
+	return atomic_read(&bdev->__bd_flags) & flag;
+}
+
+static inline void bdev_set_flag(struct block_device *bdev, unsigned flag)
+{
+	atomic_or(flag, &bdev->__bd_flags);
+}
+
+static inline void bdev_clear_flag(struct block_device *bdev, unsigned flag)
+{
+	atomic_andnot(flag, &bdev->__bd_flags);
+}
+
 static inline int get_disk_ro(struct gendisk *disk)
 {
-	return disk->part0->bd_read_only ||
+	return bdev_test_flag(disk->part0, BD_READ_ONLY) ||
 		test_bit(GD_READ_ONLY, &disk->state);
 }
 
 static inline int bdev_read_only(struct block_device *bdev)
 {
-	return bdev->bd_read_only || get_disk_ro(bdev->bd_disk);
+	return bdev_test_flag(bdev, BD_READ_ONLY) || get_disk_ro(bdev->bd_disk);
 }
 
 bool set_capacity_and_notify(struct gendisk *disk, sector_t size);
@@ -897,18 +913,25 @@ int queue_limits_commit_update(struct request_queue *q,
 		struct queue_limits *lim);
 int queue_limits_set(struct request_queue *q, struct queue_limits *lim);
 
+/**
+ * queue_limits_cancel_update - cancel an atomic update of queue limits
+ * @q:		queue to update
+ *
+ * This functions cancels an atomic update of the queue limits started by
+ * queue_limits_start_update() and should be used when an error occurs after
+ * starting update.
+ */
+static inline void queue_limits_cancel_update(struct request_queue *q)
+{
+	mutex_unlock(&q->limits_lock);
+}
+
 /*
  * Access functions for manipulating queue properties
  */
-void blk_queue_bounce_limit(struct request_queue *q, enum blk_bounce limit);
-extern void blk_queue_max_hw_sectors(struct request_queue *, unsigned int);
 extern void blk_queue_chunk_sectors(struct request_queue *, unsigned int);
-extern void blk_queue_max_segments(struct request_queue *, unsigned short);
-extern void blk_queue_max_discard_segments(struct request_queue *,
-		unsigned short);
 void blk_queue_max_secure_erase_sectors(struct request_queue *q,
 		unsigned int max_sectors);
-extern void blk_queue_max_segment_size(struct request_queue *, unsigned int);
 extern void blk_queue_max_discard_sectors(struct request_queue *q,
 		unsigned int max_discard_sectors);
 extern void blk_queue_max_write_zeroes_sectors(struct request_queue *q,
@@ -925,7 +948,6 @@ void disk_update_readahead(struct gendisk *disk);
 extern void blk_limits_io_min(struct queue_limits *limits, unsigned int min);
 extern void blk_queue_io_min(struct request_queue *q, unsigned int min);
 extern void blk_limits_io_opt(struct queue_limits *limits, unsigned int opt);
-extern void blk_queue_io_opt(struct request_queue *q, unsigned int opt);
 extern void blk_set_queue_depth(struct request_queue *q, unsigned int depth);
 extern void blk_set_stacking_limits(struct queue_limits *lim);
 extern int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
@@ -933,10 +955,6 @@ extern int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 void queue_limits_stack_bdev(struct queue_limits *t, struct block_device *bdev,
 		sector_t offset, const char *pfx);
 extern void blk_queue_update_dma_pad(struct request_queue *, unsigned int);
-extern void blk_queue_segment_boundary(struct request_queue *, unsigned long);
-extern void blk_queue_virt_boundary(struct request_queue *, unsigned long);
-extern void blk_queue_dma_alignment(struct request_queue *, int);
-extern void blk_queue_update_dma_alignment(struct request_queue *, int);
 extern void blk_queue_rq_timeout(struct request_queue *, unsigned int);
 extern void blk_queue_write_cache(struct request_queue *q, bool enabled, bool fua);
 
@@ -944,9 +962,6 @@ struct blk_independent_access_ranges *
 disk_alloc_independent_access_ranges(struct gendisk *disk, int nr_ia_ranges);
 void disk_set_independent_access_ranges(struct gendisk *disk,
 				struct blk_independent_access_ranges *iars);
-
-extern bool blk_queue_can_use_dma_map_merging(struct request_queue *q,
-					      struct device *dev);
 
 bool __must_check blk_get_queue(struct request_queue *);
 extern void blk_put_queue(struct request_queue *);
@@ -1092,7 +1107,7 @@ static inline int sb_issue_zeroout(struct super_block *sb, sector_t block,
 
 static inline bool bdev_is_partition(struct block_device *bdev)
 {
-	return bdev->bd_partno;
+	return bdev_partno(bdev) != 0;
 }
 
 enum blk_default_limits {
@@ -1372,11 +1387,6 @@ static inline unsigned int blksize_bits(unsigned int size)
 	return order_base_2(size >> SECTOR_SHIFT) + SECTOR_SHIFT;
 }
 
-static inline unsigned int block_size(struct block_device *bdev)
-{
-	return 1 << bdev->bd_inode->i_blkbits;
-}
-
 int kblockd_schedule_work(struct work_struct *work);
 int kblockd_mod_delayed_work_on(int cpu, struct delayed_work *dwork, unsigned long delay);
 
@@ -1482,7 +1492,7 @@ static inline void bio_end_io_acct(struct bio *bio, unsigned long start_time)
 }
 
 int bdev_read_only(struct block_device *bdev);
-int set_blocksize(struct block_device *bdev, int size);
+int set_blocksize(struct file *file, int size);
 
 int lookup_bdev(const char *pathname, dev_t *dev);
 
@@ -1544,6 +1554,8 @@ void blkdev_put_no_open(struct block_device *bdev);
 
 struct block_device *I_BDEV(struct inode *inode);
 struct block_device *file_bdev(struct file *bdev_file);
+bool disk_live(struct gendisk *disk);
+unsigned int block_size(struct block_device *bdev);
 
 #ifdef CONFIG_BLOCK
 void invalidate_bdev(struct block_device *bdev);

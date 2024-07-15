@@ -411,7 +411,7 @@ TRACE_EVENT(sched_process_exec,
 	),
 
 	TP_fast_assign(
-		__assign_str(filename, bprm->filename);
+		__assign_str(filename);
 		__entry->pid		= p->pid;
 		__entry->old_pid	= old_pid;
 	),
@@ -445,10 +445,10 @@ TRACE_EVENT(sched_prepare_exec,
 	),
 
 	TP_fast_assign(
-		__assign_str(interp, bprm->interp);
-		__assign_str(filename, bprm->filename);
+		__assign_str(interp);
+		__assign_str(filename);
 		__entry->pid = task->pid;
-		__assign_str(comm, task->comm);
+		__assign_str(comm);
 	),
 
 	TP_printk("interp=%s filename=%s pid=%d comm=%s",
@@ -787,7 +787,7 @@ DECLARE_TRACE(pelt_dl_tp,
 	TP_PROTO(struct rq *rq),
 	TP_ARGS(rq));
 
-DECLARE_TRACE(pelt_thermal_tp,
+DECLARE_TRACE(pelt_hw_tp,
 	TP_PROTO(struct rq *rq),
 	TP_ARGS(rq));
 

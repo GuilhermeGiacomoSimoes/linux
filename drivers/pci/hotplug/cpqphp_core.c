@@ -1139,7 +1139,8 @@ static int cpqhpc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* set up the interrupt */
 	dbg("HPC interrupt = %d\n", ctrl->interrupt);
-	if (request_irq(ctrl->interrupt, cpqhp_ctrl_intr,
+
+	if (request_threaded_irq(ctrl->interrupt, cpqhp_ctrl_isr, cpqhp_ctrl_ist,
 			IRQF_SHARED, MY_NAME, ctrl)) {
 		err("Can't get irq %d for the hotplug pci controller\n",
 			ctrl->interrupt);

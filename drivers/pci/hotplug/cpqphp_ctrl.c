@@ -873,9 +873,24 @@ int cpqhp_resource_sort_and_combine(struct pci_resource **head)
 	return 0;
 }
 
-
-irqreturn_t cpqhp_ctrl_intr(int IRQ, void *data)
+irqreturn_t cpqhp_ctrl_isr(int IRQ, void *data)
 {
+	pr_info("%s: isr for interrupt handler\n", __func__);
+
+	struct controller *ctrl = data;
+	struct pci_dev *pdev = ctrl->pci_dev;
+
+	if (pdev->ignore_hotplug) {
+		pr_info("ignoring hotplug");
+		return IRQ_HANDLED;
+	}
+
+	return IRQ_WAKE_THREAD;
+}
+
+irqreturn_t cpqhp_ctrl_ist(int IRQ, void *data)
+{
+	pr_info("%s: init from thread\n", __func__);
 	struct controller *ctrl = data;
 	u8 schedule_flag = 0;
 	u8 reset;

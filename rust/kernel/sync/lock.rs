@@ -140,6 +140,43 @@ impl<T, B: Backend> Lock<T, B> {
             }),
         })
     }
+
+    /// Get a mutable reference to data
+    ///
+    /// ```
+    /// use kernel::sync::{new_mutex, Mutex};
+    ///
+    /// struct Inner {
+    ///     a: u32,
+    /// }
+    ///
+    /// #[pin_data]
+    /// struct Example {
+    ///     #[pin]
+    ///     d: Mutex<Inner>,
+    /// }
+    ///
+    /// impl Example {
+    ///     fn new() -> impl PinInit<Self> {
+    ///         pin_init!(Self {
+    ///             // This new_mutex! can be anothers locks like new_spinlock!()
+    ///             d <- new_mutex!(Inner { a: 20 })
+    ///         })
+    ///     }
+    /// }
+    ///
+    /// let mut pin = KBox::pin_init(Example::new(), GFP_KERNEL)?;
+    /// let mut_pin = pin.as_mut();
+    ///
+    /// let data = unsafe { Pin::get_unchecked_mut(mut_pin).d.get_mut() };
+    /// assert_eq!(data.a, 20);
+    /// ```
+    pub fn get_mut(&mut self) -> &mut T {
+        // SAFETY: the UnsafeCell guarantee that the self.data is not null.
+        // The `&mut self` guarantees the exclusive access to the underlying data, therefore it's
+        // safe to reborrow the inner data.
+        unsafe { &mut *self.data.get() }
+    }
 }
 
 impl<B: Backend> Lock<(), B> {

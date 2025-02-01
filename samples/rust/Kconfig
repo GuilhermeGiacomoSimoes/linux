@@ -37,4 +37,9 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config TEST_LOCK_GET_MUT
+       bool "testing the get_mut()"
+       help
+               module to test get_mut()
+
 endif # SAMPLES_RUST

@@ -3800,6 +3800,14 @@ static inline vm_fault_t vmf_can_call_fault(const struct vm_fault *vmf)
 	return VM_FAULT_RETRY;
 }
 
+/*
+ */
+static inline bool vma_has_anon_vma(const struct vm_area_struct *vma)
+{
+	return data_race(vma->anon_vma);
+}
+
+
 /**
  * __vmf_anon_prepare - Prepare to handle an anonymous fault.
  * @vmf: The vm_fault descriptor passed from the fault handler.
@@ -3820,8 +3828,12 @@ vm_fault_t __vmf_anon_prepare(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret = 0;
 
-	if (likely(vma->anon_vma))
+	if (strcmp(current->comm, "seupai") == 0) 
+		pr_err("BEFORE CHECK anon_vma");
+	if (likely(vma_has_anon_vma(vma)))
 		return 0;
+	if (strcmp(current->comm, "seupai") == 0) 
+		pr_err("AFTER CHECK anon_vma");
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 		if (!mmap_read_trylock(vma->vm_mm))
 			return VM_FAULT_RETRY;

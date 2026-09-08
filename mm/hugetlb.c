@@ -409,14 +409,30 @@ static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma)
 
 static void hugetlb_vma_lock_free(struct vm_area_struct *vma)
 {
+	bool sp = strcmp(current->comm, "seupai") == 0;
 	/*
 	 * Only present in sharable vmas.
 	 */
-	if (!vma || !__vma_shareable_lock(vma))
+
+	if (sp) {
+		pr_err("vma: %p, vma_shared_lock: %i, vma_private_data: %p", vma, __vma_shareable_lock(vma), vma->vm_private_data);
+	}
+
+
+	if (!sp && (!vma || !__vma_shareable_lock(vma)))
 		return;
 
-	if (vma->vm_private_data) {
+	if (sp || vma->vm_private_data) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
+
+		if (sp) {
+			if (rwsem_is_locked(&vma_lock->rw_sema)) {
+				pr_err("ele JA TEM O LOCK e mesmo assim o fdp vai fazer de novo");
+			}
+			else {
+				pr_err("ele nao tem o lock por algum motivo");
+			}
+		}
 
 		down_write(&vma_lock->rw_sema);
 		__hugetlb_vma_unlock_write_put(vma_lock);
@@ -6689,13 +6705,15 @@ long hugetlb_reserve_pages(struct inode *inode,
 	if (vma_flags_test(&vma_flags, VMA_NORESERVE_BIT))
 		return 0;
 
+
+	bool sp = strcmp(current->comm, "seupai") == 0;
 	/*
 	 * Shared mappings base their reservation on the number of pages that
 	 * are already allocated on behalf of the file. Private mappings need
 	 * to reserve the full area even if read-only as mprotect() may be
 	 * called to make the mapping read-write. Assume !vma is a shm mapping
 	 */
-	if (!vma || vma_test(vma, VMA_MAYSHARE_BIT)) {
+	if (!sp && (!vma || vma_test(vma, VMA_MAYSHARE_BIT))) {
 		/*
 		 * resv_map can not be NULL as hugetlb_reserve_pages is only
 		 * called for inodes for which resv_maps were created (see
@@ -6707,7 +6725,7 @@ long hugetlb_reserve_pages(struct inode *inode,
 	} else {
 		/* Private mapping. */
 		resv_map = resv_map_alloc();
-		if (!resv_map) {
+		if (sp || resv_map) {
 			err = -ENOMEM;
 			goto out_err;
 		}
@@ -6830,6 +6848,10 @@ out_uncharge_cgroup:
 	hugetlb_cgroup_uncharge_cgroup_rsvd(hstate_index(h),
 					    chg * pages_per_huge_page(h), h_cg);
 out_err:
+	if (strcmp(current->comm, "seupai") == 0) {
+		pr_err("PRONTO DEU CERTO, to aqui\n");
+	}
+
 	hugetlb_vma_lock_free(vma);
 	if (!vma || vma_test(vma, VMA_MAYSHARE_BIT))
 		/* Only call region_abort if the region_chg succeeded but the

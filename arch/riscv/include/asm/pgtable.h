@@ -991,9 +991,19 @@ static inline bool pte_user_accessible_page(struct mm_struct *mm, unsigned long 
 	return pte_present(pte) && pte_user(pte);
 }
 
+static inline bool pmd_exec(pmd_t pmd)
+{
+	return pte_exec(pmd_pte(pmd));
+}
+
+static inline bool pmd_user_exec(pmd_t pmd)
+{
+	return pmd_user(pmd) && pmd_exec(pmd);
+}
+
 static inline bool pmd_user_accessible_page(struct mm_struct *mm, unsigned long addr, pmd_t pmd)
 {
-	return pmd_leaf(pmd) && pmd_user(pmd);
+	return pmd_leaf(pmd) && pmd_present(pmd) && pmd_user_exec(pmd);
 }
 
 static inline bool pud_user_accessible_page(struct mm_struct *mm, unsigned long addr, pud_t pud)

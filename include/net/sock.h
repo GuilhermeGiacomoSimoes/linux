@@ -1831,11 +1831,10 @@ static inline void sock_release_ownership(struct sock *sk)
 	mutex_release(&sk->sk_lock.dep_map, _RET_IP_);
 }
 
-/* no reclassification while locks are held */
+/* No reclassification while locks are held */
 static inline bool sock_allow_reclassification(const struct sock *csk)
 {
 	struct sock *sk = (struct sock *)csk;
-
 	return !sock_owned_by_user_nocheck(sk) &&
 		!spin_is_locked(&sk->sk_lock.slock);
 }
@@ -3191,4 +3190,21 @@ static inline bool sk_is_readable(struct sock *sk)
 
 	return false;
 }
+
+/*
+ * Reclassify the lockdep class of a live socket lock.  Unlike
+ * sock_lock_init_class_and_name() this variant does not touch the
+ * lock itself, sk_lock.owned or the wait queue, so it is safe on a
+ * socket that userspace still holds.  The caller should check
+ * sock_allow_reclassification() first to narrow the window in which
+ * the lock is in use by lock_sock().
+ */
+#define sock_lock_reclassify_and_name(sk, sname, skey, name, key)	\
+do {									\
+	sk_owner_set(sk, THIS_MODULE);					\
+	lockdep_set_class_and_name(&(sk)->sk_lock.slock,		\
+				   (skey), (sname));			\
+	lockdep_init_map(&(sk)->sk_lock.dep_map, (name), (key), 0);	\
+} while (0)
+
 #endif	/* _SOCK_H */
